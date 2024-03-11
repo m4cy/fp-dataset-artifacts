@@ -62,6 +62,24 @@ def main():
         # so if we want to use a jsonl file for evaluation we need to get the "train" split
         # from the loaded dataset
         eval_split = 'train'
+    elif args.dataset.endswith('.tsv'):
+        dataset_id = None
+        data_files = {
+            "train": "./processed_train.tsv",
+            "validation": "./processed_dev.tsv",
+            "test": "./processed_test.tsv",
+        }
+        dataset = datasets.load_dataset("csv", data_files=data_files, sep="\t")
+        eval_split = 'test'
+    elif args.dataset.endswith('.txt'):
+        dataset_id = None
+        data_files = {
+            "train": "./snli_train.txt",
+            "validation": "./snli_dev.txt",
+            "test": "./snli_test.txt",
+        }
+        dataset = datasets.load_dataset("csv", data_files=data_files, sep="\t")
+        eval_split = 'test'
     else:
         default_datasets = {'qa': ('squad',), 'nli': ('snli',)}
         dataset_id = tuple(args.dataset.split(':')) if args.dataset is not None else \
