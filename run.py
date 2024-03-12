@@ -5,8 +5,20 @@ from helpers import prepare_dataset_nli, prepare_train_dataset_qa, \
     prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy
 import os
 import json
+import torch.nn as nn
+import torch
+from biased_model import *
 
 NUM_PREPROCESSING_WORKERS = 2
+
+BiasedModel = torch.load('./biased_model.pt')
+
+class BiasedTrainer(Trainer):
+     def compute_loss(self, model, inputs, return_outputs=False):
+        old_loss = super().compute_loss(model, inputs, return_outputs)
+        BiasedModel.eval()
+        print(inputs)
+        predict(BiasedModel, inputs)
 
 
 def main():
@@ -97,6 +109,7 @@ def main():
     if dataset_id == ('snli',):
         # remove SNLI examples with no label
         dataset = dataset.filter(lambda ex: ex['label'] != -1)
+
     
     train_dataset = None
     eval_dataset = None
@@ -112,6 +125,7 @@ def main():
             num_proc=NUM_PREPROCESSING_WORKERS,
             remove_columns=train_dataset.column_names
         )
+        train_biased(model, train_dataset, criterion, optimizer)
     if training_args.do_eval:
         eval_dataset = dataset[eval_split]
         if args.max_eval_samples:
@@ -138,6 +152,7 @@ def main():
         compute_metrics = lambda eval_preds: metric.compute(
             predictions=eval_preds.predictions, references=eval_preds.label_ids)
     elif args.task == 'nli':
+        trainer_class = BiasedTrainer(model)
         compute_metrics = compute_accuracy
     
 
