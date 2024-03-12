@@ -8,6 +8,7 @@ import json
 import torch.nn as nn
 import torch
 from biased_model import *
+import math
 
 NUM_PREPROCESSING_WORKERS = 2
 
@@ -15,10 +16,12 @@ BiasedModel = torch.load('./biased_model.pt')
 
 class BiasedTrainer(Trainer):
      def compute_loss(self, model, inputs, return_outputs=False):
-        old_loss = super().compute_loss(model, inputs, return_outputs)
+        old_loss, old_output = super().compute_loss(model, inputs, True)
         BiasedModel.eval()
         print(inputs)
-        predict(BiasedModel, inputs)
+        bias = predict(BiasedModel, inputs)
+        new_output = nn.Softmax(math.log(old_output) + math.log(bias))
+        
 
 
 def main():
@@ -152,7 +155,7 @@ def main():
         compute_metrics = lambda eval_preds: metric.compute(
             predictions=eval_preds.predictions, references=eval_preds.label_ids)
     elif args.task == 'nli':
-        trainer_class = BiasedTrainer(model)
+        trainer_class = BiasedTrainer
         compute_metrics = compute_accuracy
     
 

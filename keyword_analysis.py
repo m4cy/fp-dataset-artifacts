@@ -19,9 +19,9 @@ standard_set = pd.DataFrame(line_dicts)
 stopwords=get_stop_words('english')
 gold_label_encoding = {'hypotheses_neutral': 1, 'hypotheses_entail': 0, 'hypotheses_contra': 2}
 corresps_standard = {}
-corresps_standard['hypotheses_neutral'] = standard_set[standard_set['predicted_label'] == 1]['hypothesis']
-corresps_standard['hypotheses_entail'] =  standard_set[standard_set['predicted_label'] == 0]['hypothesis']
-corresps_standard['hypotheses_contra'] =  standard_set[standard_set['predicted_label'] == 2]['hypothesis']
+corresps_standard['hypotheses_neutral'] = standard_set[standard_set['label'] == 1]['hypothesis']
+corresps_standard['hypotheses_entail'] =  standard_set[standard_set['label'] == 0]['hypothesis']
+corresps_standard['hypotheses_contra'] =  standard_set[standard_set['label'] == 2]['hypothesis']
 
 num_words_overall = {'hypotheses_neutral': 0, 'hypotheses_entail': 0, 'hypotheses_contra': 0}
 def frequentize(dictionary):
@@ -99,12 +99,14 @@ print(list(adjusted['hypotheses_neutral'].items())[0:30])
 
 
 
-# combined = list(adjusted['hypotheses_entail'].items()) + list(adjusted['hypotheses_contra'].items()) + list(adjusted['hypotheses_neutral'].items())
-# combined = sorted(combined, key=lambda item: item[1])
-# combined = [i[0] for i in combined][0:1024]
-# with open("bag.txt", "a") as outfile:
-#     for word in combined:
-#         outfile.write(word + " ")
+combined = list(adjusted['hypotheses_entail'].items()) + list(adjusted['hypotheses_contra'].items()) + list(adjusted['hypotheses_neutral'].items())
+combined = sorted(combined, key=lambda item: item[1])
+combined = set([i[0] for i in combined])
+combined = list(combined)[0:1024]
+print(len(combined))
+with open("bag.txt", "a") as outfile:
+    for word in combined:
+        outfile.write(word + " ")
 
 # json_dict = {}
 # for key in adjusted:
