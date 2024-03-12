@@ -91,9 +91,9 @@ def train_biased(model, train_loader, criterion, optimizer):
 
 
 # train_set = [{'hypothesis': 'The sisters are hugging goodbye while holding to go packages after just eating lunch.', 'label': 1}]
-# train_biased(model, train_loader, criterion, optimizer)
-# torch.jit.save(torch.jit.script(model), "biased_model.pt")
-test_model = torch.load('./biased_model.pt')
+train_biased(model, train_loader, criterion, optimizer)
+torch.jit.save(torch.jit.script(model), "biased_model.pt")
+# test_model = torch.load('./biased_model.pt')
 def predict(model, test_example):
     with torch.no_grad():
         input = torch.tensor(make_bow(test_example)['hypothesis']).to('cuda')
@@ -109,8 +109,8 @@ correct = 0
 total = 0
 with torch.no_grad():   
     for X, y in tqdm.tqdm(test_loader):
-        test_model.eval()
-        output = test_model.forward(X)
+        model.eval()
+        output = model.forward(X)
         comp = torch.argmax(output, dim=1) == torch.argmax(y, dim=1)
         correct += comp.sum()
         total += output.shape[0]

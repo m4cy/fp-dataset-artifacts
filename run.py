@@ -12,17 +12,18 @@ import math
 
 NUM_PREPROCESSING_WORKERS = 2
 
-BiasedModel = torch.load('./biased_model.pt')
+biased_model = torch.load('./biased_model.pt')
 
 class BiasedTrainer(Trainer):
      def compute_loss(self, model, inputs, return_outputs=False):
-        old_loss, old_output = super().compute_loss(model, inputs, True)
-        BiasedModel.eval()
+        _, old_output = super().compute_loss(model, inputs, True)
+        labels = inputs.pop("labels")
+        biased_model.eval()
         print(inputs)
-        bias = predict(BiasedModel, inputs)
+        bias = predict(biased_model, inputs)
         new_output = nn.Softmax(math.log(old_output) + math.log(bias))
-        
-
+        loss = self.label_smoother(new_output, labels)
+        return (loss, new_output) if return_outputs else loss
 
 def main():
     argp = HfArgumentParser(TrainingArguments)
