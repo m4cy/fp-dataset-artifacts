@@ -7,23 +7,13 @@ import os
 import json
 import torch.nn as nn
 import torch
-from biased_model import *
 import math
+import numpy as np
 
 NUM_PREPROCESSING_WORKERS = 2
 
-biased_model = torch.load('./biased_model.pt')
+biased_model = torch.load('./biased_model.pt').double()
 
-class BiasedTrainer(Trainer):
-     def compute_loss(self, model, inputs, return_outputs=False):
-        _, old_output = super().compute_loss(model, inputs, True)
-        labels = inputs.pop("labels")
-        biased_model.eval()
-        print(inputs)
-        bias = predict(biased_model, inputs)
-        new_output = nn.Softmax(math.log(old_output) + math.log(bias))
-        loss = self.label_smoother(new_output, labels)
-        return (loss, new_output) if return_outputs else loss
 
 def main():
     argp = HfArgumentParser(TrainingArguments)
@@ -85,7 +75,7 @@ def main():
         # MNLI has two validation splits (one with matched domains and one with mismatched domains). Most datasets just have one "validation" split
         eval_split = 'validation_matched' if dataset_id == ('glue', 'mnli') else 'validation'
         # Load the raw data
-        dataset = datasets.load_dataset(*dataset_id)
+        dataset = datasets.load_dataset(*dataset_id).remove_columns('premise')
     
     # NLI models need to have the output label count specified (label 0 is "entailed", 1 is "neutral", and 2 is "contradiction")
     task_kwargs = {'num_labels': 3} if args.task == 'nli' else {}
@@ -113,8 +103,43 @@ def main():
     if dataset_id == ('snli',):
         # remove SNLI examples with no label
         dataset = dataset.filter(lambda ex: ex['label'] != -1)
-
     
+
+    def open_vocab():
+        f = open("bag.txt", "r")
+        vocab = f.read()
+        vocab = vocab.split(' ')
+        vocab = vocab[0:len(vocab) - 1]
+        return vocab
+
+    vocab = open_vocab()
+    indexed = {word: i for i, word in enumerate(vocab)}
+    def make_bow(example):
+        bow = np.zeros(len(indexed))
+        for word in example:
+            if word in indexed:
+                bow[indexed[word]] = 1
+        example = bow
+        return example
+
+
+    class BiasedTrainer(Trainer):
+     def compute_loss(self, model, inputs, return_outputs=False):
+        _, old_output = super().compute_loss(model, inputs, True)
+        labels = inputs.pop("labels")
+        biased_model.eval()
+        biased_input = tokenizer.batch_decode(inputs['input_ids'], skip_special_tokens=True)
+        biased_list = [make_bow(i) for i in biased_input]
+        biased_input = torch.tensor(biased_list).to('cuda')
+        biased_outputs = biased_model.forward(biased_input.double())
+        sm = nn.Softmax(dim=0)
+        logsm = nn.LogSoftmax(dim=0)
+        softmax_input = torch.log(sm(old_output['logits'])) + torch.log(sm(biased_outputs))
+        new_output = logsm(softmax_input)
+        criterion = nn.NLLLoss()
+        loss = criterion(new_output, labels)
+        return (loss, new_output) if return_outputs else loss
+
     train_dataset = None
     eval_dataset = None
     train_dataset_featurized = None
@@ -127,9 +152,8 @@ def main():
             prepare_train_dataset,
             batched=True,
             num_proc=NUM_PREPROCESSING_WORKERS,
-            remove_columns=train_dataset.column_names
+            remove_columns=['hypothesis', 'label']
         )
-        train_biased(model, train_dataset, criterion, optimizer)
     if training_args.do_eval:
         eval_dataset = dataset[eval_split]
         if args.max_eval_samples:
@@ -138,7 +162,7 @@ def main():
             prepare_eval_dataset,
             batched=True,
             num_proc=NUM_PREPROCESSING_WORKERS,
-            remove_columns=eval_dataset.column_names
+            remove_columns=['hypothesis', 'label']
         )
 
     # Select the training configuration
@@ -156,7 +180,8 @@ def main():
         compute_metrics = lambda eval_preds: metric.compute(
             predictions=eval_preds.predictions, references=eval_preds.label_ids)
     elif args.task == 'nli':
-        trainer_class = BiasedTrainer
+        if training_args.do_train:
+            trainer_class = BiasedTrainer
         compute_metrics = compute_accuracy
     
 

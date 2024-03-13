@@ -11,7 +11,7 @@ from collections import OrderedDict
 
 lines = []
 
-with open(r'./eval_output_premises/eval_predictions.jsonl') as f:
+with open(r'./eval_output_fixed/eval_predictions.jsonl') as f:
     lines = f.read().splitlines()
 len_standard = len(lines)
 line_dicts = [json.loads(line) for line in lines]
@@ -25,31 +25,37 @@ corresps_standard['hypotheses_entail'] =  standard_set[standard_set['predicted_l
 corresps_standard['hypotheses_contra'] =  standard_set[standard_set['predicted_label'] == 2]['hypothesis']
 
 num_words_overall = {'hypotheses_neutral': 0, 'hypotheses_entail': 0, 'hypotheses_contra': 0}
-def frequentize(dictionary):
+
+def discretize(dictionary):
     oneline = ' '.join(dictionary).lower()
     words = re.findall(r'\b\w+\b', oneline.lower())
     nonstop = filter(lambda w: not w in stopwords, words)
     num_words_overall = len(words)
+    return nonstop, num_words_overall
+
+def frequentize(dictionary):
+    nonstop, num_words_overall = discretize(dictionary)
     word_frequencies = Counter(nonstop)
     return word_frequencies, num_words_overall
 
+frequentized = {'hypotheses_neutral':{}, 'hypotheses_entail': {}, 'hypotheses_contra': {}}
 for key in corresps_standard:
-    corresps_standard[key], num_words_overall[key] = frequentize(corresps_standard[key])
+    frequentized[key], num_words_overall[key] = frequentize(corresps_standard[key])
 
-all_standard_premises = corresps_standard['hypotheses_neutral'] + corresps_standard['hypotheses_entail'] + corresps_standard['hypotheses_contra']
+all_standard_premises = frequentized['hypotheses_neutral'] + frequentized['hypotheses_entail'] + frequentized['hypotheses_contra']
 result = {'hypotheses_neutral': {}, 'hypotheses_entail': {}, 'hypotheses_contra': {}}
-for key in corresps_standard:
+for key in frequentized:
     print(key)
-    for word in corresps_standard[key]:
+    for word in frequentized[key]:
         # number of times word appears in entailment / number of words overall? in entailment
-        p_word_class = corresps_standard[key][word] / num_words_overall[key]
+        p_word_class = frequentized[key][word] / num_words_overall[key]
         # number of times word appears in a hypothesis / number of words
-        # print('pwordclass', corresps_standard[key][word], len(corresps_standard[key]))
+        # print('pwordclass', frequentized[key][word], len(frequentized[key]))
         p_word = all_standard_premises[word] / len(all_standard_premises)
         # print('pword', all_standard_premises[word], len(all_standard_premises))
         # number of hypotheses / number of data lines
-        p_class = len(corresps_standard[key]) / len_standard
-        # print('pclass', len(corresps_standard[key]), len_standard)
+        p_class = len(frequentized[key]) / len_standard
+        # print('pclass', len(frequentized[key]), len_standard)
         # print(word, 'word class', p_word_class, 'pword', p_word, 'pclass', p_class)
         result[key].update({word: abs(math.log((p_word_class) / (p_word * p_class)))})
 
@@ -94,33 +100,46 @@ for word in result['hypotheses_neutral']:
 
 
 # so what I want is, the words that are most different in each class
-print(list(adjusted['hypotheses_entail'].items())[0:30])
-print(list(adjusted['hypotheses_contra'].items())[0:30])
-print(list(adjusted['hypotheses_neutral'].items())[0:30])
+print(list(adjusted['hypotheses_entail'].items())[0:120])
+print(list(adjusted['hypotheses_contra'].items())[0:120])
+print(list(adjusted['hypotheses_neutral'].items())[0:120])
 
+# def calc_pmi(hypothesis, dictionary):
+#     hyp_pmi = 0
+#     for word in nonstop:
+#         if word in dictionary:
+#             hyp_pmi += dictionary[word]
+#     return hyp_pmi    
 
+# calculate pmi for each hypothesis
+# for key in corresps_standard:
+#     for hyp in corresps_standard[key]:
+#         tokenized = re.findall(r'\b\w+\b', hyp.lower())
+#         nonstop = filter(lambda w: not w in stopwords, tokenized)
+#         calc_pmi(nonstop, adjusted[key])
 
-combined = list(adjusted['hypotheses_entail'].items()) + list(adjusted['hypotheses_contra'].items()) + list(adjusted['hypotheses_neutral'].items())
-combined = sorted(combined, key=lambda item: item[1])
-combined = [i[0] for i in combined]
+# combined = list(adjusted['hypotheses_entail'].items()) + list(adjusted['hypotheses_contra'].items()) + list(adjusted['hypotheses_neutral'].items())
+# combined = sorted(combined, key=lambda item: item[1])
+# combined = [i[0] for i in combined]
 
-final_set = set()
-for word in combined:
-    final_set.add(word)
-    if len(final_set) == 1024:
-        break
+# final_set = set()
+# for word in combined:
+#     final_set.add(word)
+#     if len(final_set) == 1024:
+#         break
 
-combined = list(final_set)[0:1024]
-with open("bag.txt", "a") as outfile:
-    for word in combined:
-        outfile.write(word + " ")
+# combined = list(final_set)[0:1024]
+# with open("bag.txt", "a") as outfile:
+#     for word in combined:
+#         outfile.write(word + " ")
 
-# json_dict = {}
-# for key in adjusted:
-#     print(len(list(adjusted[key].items())[0:1024]))
-#     for word in list(adjusted[key].items())[0:1024]:
-#         json_dict.update({word[0]: gold_label_encoding[key]})
+json_dict = {}
+for key in adjusted:
+    adjustedkey = {}
+    for word in list(adjusted[key].items()):
+        adjustedkey.update({word[0]: word})
+    json_dict.update({gold_label_encoding[key]: adjustedkey})
 
-# json_obj = json.dumps(json_dict)
-# with open("bag.json", "w") as outfile:
-#     outfile.write(json_obj)
+json_obj = json.dumps(json_dict)
+with open("fixed_bag.json", "w") as outfile:
+    outfile.write(json_obj)
